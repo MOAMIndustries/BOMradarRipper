@@ -3,12 +3,16 @@ import datetime
 import requests
 import numpy as np
 import cv2
-#from PIL import image
+
+#Compiler variables
 debug = 0
 numFrames = 6
 yResolution = 288
 xResolution = 512
-#note BGR formatting!
+stationID = "IDR703"
+outputDirectory = "/var/www/html/"    #output path for final text files
+
+#note BGR formatting required for openCV!
 intensityList = np.array([
     [255,245,245],
     [255,180,180],
@@ -28,8 +32,8 @@ intensityList = np.array([
 ])
 print"Starting"
 
-baseURL = "http://www.bom.gov.au/radar/IDR703.T."
-#get current UTC time, should be better handling of UTC offset instead of hardcode
+baseURL = "http://www.bom.gov.au/radar/{}.T.".format(stationID)
+#get current UTC time, should be better handling of UTC offset instead of hardcode as this breaks when running locally
 #minutes subtraction is to ensure the previous six minute block is captured as latest image is not updated immediatly
 timeIndex = datetime.datetime.now() - datetime.timedelta(hours = 8, minutes = 4)
 
@@ -62,35 +66,42 @@ for x in range(0,len(imageURL)):
             handle.write(block)
     
     
-#create a list of cv2 image objects, cropped to size reflective of led display
+#create a list of cv2 image objects, cropped from 1:1 to 16:9 aspect ratio of led display. Focussed on 'Armadale'
 imageList = []
 for x in range(0, len(imageURL)):
     image = cv2.imread(imageFileName[x])
     image = image[58:346, 0:512]
     imageList.append(image)
 
+#Display images when debugging
 if debug:
     for x in range(0, len(imageURL)):
         cv2.imshow(imageFileName[x],imageList[x])
         cv2.waitKey(10000)
         cv2.destroyAllWindows()    
 
-#process rain intensity
+#process rain intensity images into a scaled text file suitable for processing a on a microcontroller
 intensityFrames = []
 for idx, image in enumerate(imageList):
-    intensityPlot = np.zeros(shape=(yResolution,xResolution), dtype='uint8')
-    cv2.imshow('view',image)
-    cv2.waitKey(100)
+    intensityPlot = np.zeros(shape=(yResolution,xResolution), dtype='uint8')  #create Null array for processed data
+    if debug:
+        cv2.imshow('view',image)
+        cv2.waitKey(100)
+    #itterate through pixels and compare against intensity
+    #TODO: Look for numpy and openCV functions to perform this comparison more efficiently
     for x in range(0,xResolution):
         for y in range(0,yResolution):
             for i in range(0,len(intensityList)):
                 if np.array_equal(image[y,x],intensityList[i]):
                     intensityPlot[y,x] = i+1
 
-    nameString = "large{}.txt".format(idx)
-    np.savetxt(nameString, intensityPlot, fmt='%u')
+    if debug:
+        #export intensity array as text file for verification
+        nameString = "large{}.txt".format(idx)
+        np.savetxt(nameString, intensityPlot, fmt='%u')
 
-    #create scaled down version, sampling 32x32 area with the highest value
+    #scale image to LED display resolution, sampling 32x32 area with the highest value
+    #TODO: Make code more flexible for different display resolutions and ratios
     scaledPlot = np.zeros(shape=(9,16), dtype='uint8')
     for x in range(0,16):
         for y in range(0,9):
@@ -103,6 +114,10 @@ for idx, image in enumerate(imageList):
     np.savetxt(nameString, scaledPlot, fmt='%u')
 
     #convertscaled plot into formatted string
+    #string formatting allows for simpler microcontroller processing of code
+    #collumns are ',' deliminated
+    #rows are ';' deliminated
+    #files are terminated with '.'
     messageString = ""
     for y in range(0,9):
         for x in range(0,16):
@@ -111,7 +126,7 @@ for idx, image in enumerate(imageList):
         messageString+= ";"
     messageString += "."
     print messageString
-    outputName = "{}{}.txt".format(outputPath, idx)
+    outputFile = "{}{}.txt".format(outputDirectory, idx)
     with open(outputName, 'wb') as handle:
         handle.write(messageString)
 
