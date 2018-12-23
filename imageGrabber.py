@@ -31,11 +31,12 @@ intensityList = np.array([
     [0,0,40]
 ])
 print"Starting"
+startTime = datetime.datetime.now()
 
 baseURL = "http://www.bom.gov.au/radar/{}.T.".format(stationID)
 #get current UTC time, should be better handling of UTC offset instead of hardcode as this breaks when running locally
 #minutes subtraction is to ensure the previous six minute block is captured as latest image is not updated immediatly
-timeIndex = datetime.datetime.now() - datetime.timedelta(hours = 8, minutes = 4)
+timeIndex = datetime.datetime.now() - datetime.timedelta(hours = 8, minutes = 5)
 
 #sift to nearest six minute block
 shift = timeIndex.minute %6
@@ -91,9 +92,10 @@ for idx, image in enumerate(imageList):
     #TODO: Look for numpy and openCV functions to perform this comparison more efficiently
     for x in range(0,xResolution):
         for y in range(0,yResolution):
-            for i in range(0,len(intensityList)):
-                if np.array_equal(image[y,x],intensityList[i]):
-                    intensityPlot[y,x] = i+1
+            if not np.array_equal(image[y,x],[0,0,0]): #saves itterating through array if first value is null
+                 for i in range(0,len(intensityList)):
+                    if np.array_equal(image[y,x],intensityList[i]):
+                        intensityPlot[y,x] = i+1
 
     if debug:
         #export intensity array as text file for verification
@@ -127,6 +129,9 @@ for idx, image in enumerate(imageList):
     messageString += "."
     print messageString
     outputFile = "{}{}.txt".format(outputDirectory, idx)
-    with open(outputName, 'wb') as handle:
+    with open(outputFile, 'wb') as handle:
         handle.write(messageString)
 
+elapsedTime = datetime.datetime.now() - startTime
+print "Elapsed Time"
+print str(elapsedTime)
